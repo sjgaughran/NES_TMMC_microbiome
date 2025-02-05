@@ -1,0 +1,297 @@
+---------------------------------------------------------------------------------
+ANALYSES RAN FOR TIMEPOINT 1 ONLY
+---------------------------------------------------------------------------------
+
+# Note: new folder was created to conduct timepoint 1 only. This analysis was done in order to understand whether alpha diversity was different between sexes and to act as a baseline for comparing significant factors shaping beta diversity with time point 2. All necessary files for analysis were downloaded locally. A new metadata file ("metadata-19-longitudinal timepoint1.tsv") that included the appropriate cohort was created. 
+
+# STEP 1: Filtered my feature table to only include seals that passed our inclusion criteria 
+qiime feature-table filter-samples \
+  --i-table table-merged-NES-192.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-filtered-table table-merged-NES-19-T1.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-19-T1.qza \
+  --m-sample-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization table-merged-NES-19-T1.qzv
+
+qiime feature-table filter-seqs \
+  --i-data rep-seqs-merged-NES-192.qza \
+  --i-table table-merged-NES-19-T1.qza\
+  --o-filtered-data rep-seqs-merged-NES-19-T1.qza 
+
+# STEP 2: Do all filtering first with 44 samples 
+## Filter out mitochondria and chloroplasts 
+### Classify sequences 
+wget \
+  -O "gg-13-8-99-515-806-nb-classifier.qza" \
+  "https://data.qiime2.org/2024.5/common/gg-13-8-99-515-806-nb-classifier.qza"
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier gg-13-8-99-515-806-nb-classifier.qza \
+  --i-reads rep-seqs-merged-NES-19-T1.qza  \
+  --o-classification taxonomy-19-T1.qza
+
+### Once sequences are classified, filter out mitochondria and chloroplasts 
+qiime taxa filter-table \
+  --i-table table-merged-NES-19-T1.qza \
+  --i-taxonomy taxonomy-19-T1.qza \
+  --p-exclude mitochondria,chloroplast \
+  --o-filtered-table table-merged-NES-19-T1-no-mito-chloro.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-19-T1-no-mito-chloro.qza \
+  --m-sample-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization table-merged-NES-44-no-mito-chloro.qzv 
+
+## Remove singletons 
+## Filtering out singletons, unique ASVs that only exist in one example 
+qiime feature-table filter-features \
+  --i-table table-merged-NES-19-T1-no-mito-chloro.qza \
+  --p-min-samples 2 \
+  --o-filtered-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+  --m-sample-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization table-merged-NES-19-T1-no-mito-chloro-singletons.qzv
+
+qiime feature-table filter-seqs \
+  --i-data rep-seqs-merged-NES-19-T1.qza \
+  --i-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+  --o-filtered-data rep-seqs-merged-NES-19-T1-no-mito-chloro-singletons.qza 
+
+## Making phylogenetic trees \
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences  rep-seqs-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+  --o-alignment aligned-rep-seqs-T1.qza \
+  --o-masked-alignment masked-aligned-rep-seqs-T1.qza \
+  --o-tree unrooted-tree-T1.qza \
+  --o-rooted-tree rooted-tree-T1.qza
+
+# Step 3: Generating diversity statistics 
+## Alpha Rarefaction Plotting
+qiime diversity alpha-rarefaction \
+--i-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+--i-phylogeny rooted-tree-T1.qza \
+--p-max-depth 10000 \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--o-visualization alpha-rarefaction.qzv
+
+qiime diversity alpha-rarefaction \
+--i-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+--i-phylogeny rooted-tree-T1.qza \
+--p-metrics pielou_e \
+--p-max-depth 10000 \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--o-visualization alpha-rarefaction-pe-only.qzv
+
+  
+# Step 3: Generating diversity statistics \
+## Generating core metrics \
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-tree-T1.qza \
+  --i-table table-merged-NES-19-T1-no-mito-chloro-singletons.qza \
+  --p-sampling-depth 4768 \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --output-dir core-metrics-results
+
+### ALPHA DIVERSITY VISUALIZATIONS 
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/evenness_vector.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/evenness-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/observed_features_vector.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/observed_features_vector.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/shannon_vector.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/shannon_vector.qzv
+
+### BRAY CURTIS
+#### Univariate 
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-longT1-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-longT1-sex.qzv \
+  --p-formula "Sex" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-longT1-county.qzv \
+  --p-formula "County"  
+
+#### Tests of homogeneity of dispersion.
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/bray-curtis-plate-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/bray-curtis-sex-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/bray-curtis-county-permdisp.qzv
+
+#### Multivariate 
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-sex-longT1-multivariate.qzv \
+  --p-formula "County+Plate+Sex" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-plate-longT1-multivariate.qzv \
+  --p-formula "County+Sex+Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-county-longT1-multivariate.qzv \
+  --p-formula "Plate+Sex+County"  
+
+### UNWEIGHTED
+#### Univariate
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-longT1-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-longT1-sex.qzv \
+  --p-formula "Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-longT1-county.qzv \
+  --p-formula "County" 
+
+#### Tests of homogeneity of dispersion.
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/unweighted-plate-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/unweighted-sex-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/unweighted-county-permdisp.qzv
+
+#### Multivariate
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-plate-longT1-multivariate.qzv \
+  --p-formula "County+Sex+Plate"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-sex-longT1-multivariate.qzv \
+  --p-formula "County+Plate+Sex" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-county-longT1-multivariate.qzv \
+  --p-formula "Plate+Sex+County"
+
+### WEIGHTED 
+#### Univariate
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-longT1-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-longT1-sex.qzv \
+  --p-formula "Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-longT1-county.qzv \
+  --p-formula "County"
+
+#### Tests of homogeneity of dispersion.
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/weighted-plate-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/weighted-sex-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/weighted-county-permdisp.qzv
+
+#### Multivariate
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-sex-longT1-multivariate.qzv \
+  --p-formula "County+Plate+Sex" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-plate-longT1-multivariate.qzv \
+  --p-formula "County+Sex+Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-19-longitudinal-timepoint1.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-county-longT1-multivariate.qzv \
+  --p-formula "Plate+Sex+County" 
+
