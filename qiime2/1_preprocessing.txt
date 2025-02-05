@@ -1,0 +1,432 @@
+# Northern Elephant Seal 16S rRNA Microbiome Code 
+
+---------------------------------------------------------------------------------
+Create directory on remote computer 
+---------------------------------------------------------------------------------
+# Note: at this point microbial DNA on two 96 well plates (192 total wells: 7 negatives, 6 positives, 179 samples) was extracted, amplified, and sequenced. 
+# Create personal directory to store sequencing data via Princeton Research Computing's remote computer, Tigressdata. File path  under Tigressdata will be listed under /tigress filesystem. For example: /tigress/VONHOLDT/emilyyu
+
+---------------------------------------------------------------------------------
+Import and demultiplex data in Galaxy
+---------------------------------------------------------------------------------
+# Data is paired-end and stored in zipped fastq files (that can remain zipped for demultiplexing)
+# Primers are similar to the EMP 16S Illumina Amplicon Protocol http://press.igsb.anl.gov/earthmicrobiome/protocols-and-standards/16s/ 
+# Primers derive from Caporaso et al. 2011
+# CRITICALLY, each sample has two barcodes (one on forward, one on reverse) which differs from EMP and does not appear to be supported by QIIME2
+# THEREFORE, we demultiplex samples through the Princeton GCF Galaxy system and subsequently import demultiplexed reads into QIIME2
+
+# Raw Data Files for each library (need all 4 for demultiplexing)
+
+read_1 -- Forward Reads
+read_2 -- 12 Reverse Index / Barcodes
+read_3 -- 8 ForwardIndex / Barcodes
+read_4 -- Reverse Reads 
+
+# Create a nes_plate#_barcode_files.txt file for each dataset that contains three columns separated by tabs: 
+SampleID	BarcodeF	BarcodeR_REVERSE_COMPLEMENT
+# N.B., the reverse barcode must be the REVERSE COMPLEMENT of the primer sequence
+# N.B., I generated reverse complement sequences in http://arep.med.harvard.edu/labgc/adnan/projects/Utilities/revcomp.html
+# N.B., Remove header before importing into Galaxy
+
+# Plate 1 Amplicon Sequences for 318 cycles [000000000-G82MD_1]
+## Plate 1 barcodes: barcodes_NES_1.txt
+# Plate 2 Amplicon Sequences for 318 cycles [000000000-G8P9R_1]
+## Plate 2 barcodes: barcodes_NES_2.txt
+# N.B., Manually changed barcode files to UNIX and Unicode UTF-8 in order to run Galaxy
+# N.B., Found duplicate IDs in the original barcode files so added p1, p2, or p2wellID to duplicate sample IDs in order to differentiate between them
+### This was all done before demultiplexing so that downstream analyses would be clean (i.e., contain no duplicate sample IDs)
+
+# Import Data into Galaxy
+# Log in to https://galaxy.princeton.edu/
+# Choose Get Data => Princeton HTSEQ tool from the left menu
+# Log in to the HTSEQ database and use select the menu Search => Assay Search to find the assay of interest (search Emily Yu)
+# Click the [Upload to Galaxy] button. You should now see a new data file in your Galaxy history that will be yellow while the data imports.
+# Import barcode file by selecting Get Data --> Upload File and then drag the appropriate file into the window and click Start. 
+
+# Split data into individual files for each sample
+### [Only need to do the following steps once; otherwise start at the following step]
+### From the top menu, select [Shared Data] => [Workflows] 
+### Choose Barcode Split (paired-end, dual-index)
+### Select [+ Import Workflow] from the top right, and click on "start using this workflow"
+# Click on the new workflow from the menu [Imported: Barcode Split (paired-end, dual-index)] and select [Run]
+# Select the appropriate data files in the menus for Barcodes File, Read 1, Read 2, Read 3, and Read 4.
+# (1) barcode file (.txt file with three columns: [SampleID]	[Forward-Barcode]	[Reverse-Complement-of-Reverse-Barcode]
+# (2) Read_1_passed_filter.fastq.gz [Forward Reads]
+# (3) Read_3_Index_Read_passed_filter.fastq.gz [8 ForwardIndex / Barcodes]
+# (4) Read_2_Index_Read_passed_filter.fastq.gz [12 Reverse Index / Barcodes]
+# (5) Read_4_passed_filter.fastq.gz [Reverse Reads]
+# (6) Merge Columns 2 and 3
+# (9) Number of Allowed Mismatches = 1 // Number of Allowed Barcode Nucleotides Deletion = 0
+# (10) Number of Allowed Mismatches = 1 // Number of Allowed Barcode Nucleotides Deletion = 0
+
+# Then Run the Workflow to Demultiplex Samples
+
+# We ran this twice - once for each library (NES_1 and NES_2) 
+# We saved each of these runs to their own history in Galaxy, named for the library 
+# N.B., If chrome gets buggy, try running in FireFox or Safari.
+
+---------------------------------------------------------------------------------
+Import demultiplexed reads onto Della
+---------------------------------------------------------------------------------
+# Save "207: Paired reads FASTQ collection" from Galaxy to Desktop for each library
+# We had some trouble with these files, so we used the following round-about code to get files loaded onto della appropriately
+
+# ON LAPTOP DESKTOP
+# Unzip folders and rename NES_P1 and NES_P2
+# Compress using the following code (terminal not connected to della)
+tar -czf NES_P1.tgz NES_P1
+tar -czf NES_P2.tgz NES_P2
+
+# Use scp to import the resulting zipped files onto Della (non-della connected terminal)
+scp /Users/alexandradecandia/Desktop/NES_P1.tgz 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex'
+scp /Users/alexandradecandia/Desktop/NES_P2.tgz 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/1_NES_P2_deplex'
+
+# Unzip all files
+## If we need to get the original galaxy output files again, simply untar the CIF_S#.tar folder
+
+# NES_P1
+cd /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/
+mkdir Samples
+tar -xvf NES_P1.tgz
+mv NES_P1/* Samples/
+rm -r NES_P1
+
+# NES_P2
+cd /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/
+mkdir Samples
+tar -xvf NES_P2.tgz
+mv NES_P2/* Samples/
+rm -r NES_P2
+
+# Run rename.sh to rename all files to include sample ID (made rename.sh script using excel concatenate function and find/replace in textwrangler)
+# Run move_files.sh to move all files into the proper Sample directory (made move_files.sh using excel & find/replace in textwrangler)
+
+# Remove all sample specific directories & zip files
+# Della thought the directories are not empty, so we had to get a little creative...
+
+cd /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex
+mkdir SamplesFQ
+mv /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/*fastq /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/SamplesFQ
+rm -r Samples
+mkdir Samples
+mv /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/SamplesFQ/* /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples
+cd /tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples
+gzip *fastq
+
+cd /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex
+mkdir SamplesFQ
+mv /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/Samples/*fastq /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/SamplesFQ
+rm -r Samples
+mkdir Samples
+mv /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/SamplesFQ/* /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/Samples
+cd /tigress/VONHOLDT/emilyyu/1_NES_P2_deplex/Samples
+gzip *fastq
+
+
+---------------------------------------------------------------------------------
+Import files into QIIME2
+---------------------------------------------------------------------------------
+# SAMPLE INFORMATION - NES_P1 AND NES_P2
+# DATA UPLOADED TO DELLA IN FEBRUARY 2022
+# DATA NEEDS TO BE DENOISED BY PLATE, SO IT NEEDS TO BE IMPORTED INTO QIIME2 BY PLATE, DENOISED BY PLATE, AND THEN MERGED
+
+
+# In order to import fastq files into QIIME2, I need to use “Fastq manifest” formats
+# Our MiSeq software is Illumina1.8 or higher (confirmed by Wei Wang 2018.07.18 and by the fact that Galaxy_Collection files are suffixed .fastqsanger)
+# I will therefore proceed with the PairedEndFastqManifestPhred33 variant 
+# Info on illumina platforms and PHRED offset http://scikit-bio.org/docs/latest/generated/skbio.io.format.fastq.html#quality-score-variants 
+
+
+# Created a manifest file that contains sampleID, absolute file path, and direction (forward/reverse) of each sample
+## first six lines manifest_NES_P1.csv  
+sample-id,absolute-filepath,direction
+ES4642T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4642T0_forward.fastq.gz,forward
+ES4642T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4642T0_reverse.fastq.gz,reverse
+ES4648T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4648T0_forward.fastq.gz,forward
+ES4648T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4648T0_reverse.fastq.gz,reverse
+ES4653T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4653T0_forward.fastq.gz,forward
+ES4653T0,/tigress/VONHOLDT/emilyyu/1_NES_P1_deplex/Samples/ES4653T0_reverse.fastq.gz,reverse
+
+
+# We ran into issues with the command "module load anaconda3"
+#### ERROR: No default version defined for 'anaconda3'
+# Emailed CSES for help on 02.21.2022
+# They replied with: https://researchcomputing.princeton.edu/get-started/mistakes-avoid#modules
+# By running "module load anaconda3/2020.11" I was able to avoid the error
+# We sent a follow up email asking about which version was preferred
+# Their response: 
+## Use "module avail" to see choices:
+## https://researchcomputing.princeton.edu/support/knowledge-base/modules
+## The versions of the packages in the base environment are slightly different between choices. You should find that any version within the last year or more is fine.
+# When we ran module avail we got the following hit for the latest anaconda version: anaconda3/2021.11
+
+
+
+# Activate qiime2 environment
+module load anaconda3/2021.11
+conda activate /tigress/VONHOLDT/BIN/qiime2-2021.8
+
+
+cd /tigress/VONHOLDT/emilyyu 
+
+  
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path /tigress/VONHOLDT/emilyyu/manifest_NES_P1.csv \
+  --output-path /tigress/VONHOLDT/emilyyu/paired-end-demux-NES-P1.qza \
+  --input-format PairedEndFastqManifestPhred33
+qiime demux summarize --i-data paired-end-demux-NES-P1.qza --o-visualization paired-end-demux-NES-P1.qzv
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path /tigress/VONHOLDT/emilyyu/manifest_NES_P2.csv \
+  --output-path /tigress/VONHOLDT/emilyyu/paired-end-demux-NES-P2.qza \
+  --input-format PairedEndFastqManifestPhred33
+qiime demux summarize --i-data paired-end-demux-NES-P2.qza --o-visualization paired-end-demux-NES-P2.qzv
+
+# Confirm all samples imported correctly (should be 192 total)
+scp 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/*qzv' /Users/alexandradecandia/Desktop
+
+
+---------------------------------------------------------------------------------
+Filter demultiplexed reads by sequencing plate with DADA2 - DENOISE - and then merge into one dataset 
+---------------------------------------------------------------------------------
+# According to posts on the QIIME2 forum, denoising occurs BEFORE merging samples from different sequencing runs
+## https://forum.qiime2.org/t/multiple-sequencing-runs-normalizing-methods/3519/3 
+# See this tutorial for more information
+## https://docs.qiime2.org/2021.8/tutorials/fmt/
+
+# Activate qiime2 environment
+module load anaconda3/2021.11
+conda activate /tigress/VONHOLDT/BIN/qiime2-2021.8
+
+cd /tigress/VONHOLDT/emilyyu 
+
+# Denoise with DADA2 (trim first 13bp off forward and reverse reads; no trimming to end of sequences "to avoid reducing the read length by too much"
+# N.B., submit to cluster as this takes ~ 1-6 hours
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs paired-end-demux-NES-P1.qza \
+  --p-trim-left-f 13 \
+  --p-trim-left-r 13 \
+  --p-trunc-len-f 150 \
+  --p-trunc-len-r 150 \
+  --o-table table-NES-P1.qza \
+  --o-representative-sequences rep-seqs-NES-P1.qza  \
+  --o-denoising-stats denoising-stats-NES-P1.qza
+qiime metadata tabulate \
+  --m-input-file denoising-stats-NES-P1.qza \
+  --o-visualization denoising-stats-NES-P1.qzv
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs paired-end-demux-NES-P2.qza \
+  --p-trim-left-f 13 \
+  --p-trim-left-r 13 \
+  --p-trunc-len-f 150 \
+  --p-trunc-len-r 150 \
+  --o-table table-NES-P2.qza \
+  --o-representative-sequences rep-seqs-NES-P2.qza  \
+  --o-denoising-stats denoising-stats-NES-P2.qza
+qiime metadata tabulate \
+  --m-input-file denoising-stats-NES-P2.qza \
+  --o-visualization denoising-stats-NES-P2.qzv
+
+# Download denoising stats in non-della connected terminal
+scp 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/denoising-stats-NES*qzv' /Users/alexandradecandia/Desktop
+
+# Merge feature tables and rep-seqs 
+## https://docs.qiime2.org/2021.8/tutorials/fmt/ 
+
+# Activate qiime2 environment
+module load anaconda3/2021.11
+conda activate /tigress/VONHOLDT/BIN/qiime2-2021.8
+
+cd /tigress/VONHOLDT/emilyyu 
+
+qiime feature-table merge \
+  --i-tables table-NES-P1.qza \
+  --i-tables table-NES-P2.qza \
+  --o-merged-table table-merged-NES-192.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-192.qza \
+  --o-visualization table-merged-NES-192.qzv \
+  --m-sample-metadata-file metadata-192.tsv
+ 
+qiime feature-table merge-seqs \
+  --i-data rep-seqs-NES-P1.qza \
+  --i-data rep-seqs-NES-P2.qza \
+  --o-merged-data rep-seqs-merged-NES-192.qza
+  
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs-merged-NES-192.qza \
+  --o-visualization rep-seqs-merged-NES-192.qzv
+
+# Use QIIME2 View to visualize all of these files and download metadata 
+# https://view.qiime2.org/
+
+
+# Downloading all qzv files generated to date
+scp 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/*qzv' /Users/alexandradecandia/Desktop
+scp 'decandia@della8.princeton.edu:/tigress/VONHOLDT/etran/*qzv' /Users/alexandradecandia/Desktop
+
+
+---------------------------------------------------------------------------------
+ Explore negative controls
+---------------------------------------------------------------------------------
+# Copy files to desktop
+scp 'decandia@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/*qzv' /Users/alexandradecandia/Desktop
+
+# Explored what features are in the control samples
+
+#
+# NEGATIVE CONTROLS 
+#
+
+# FEATURE COUNTS FROM MERGED FEATURE TABLE (192 SAMPLES)
+ESXXXXX1: 208
+ESXXXXX2: 27
+ESXXXXX3: 19 
+ESXXXXX4: 20202
+ES4756T0: 17009
+ES479410: 5
+ES479420p2f10: 203
+
+# Filtered my feature table to ONLY include negative control samples
+qiime feature-table filter-samples \
+  --i-table table-merged-NES-192.qza \
+  --m-metadata-file metadata-192.tsv \
+  --p-where "SampleType='negative'" \
+  --o-filtered-table table-merged-NES-negative.qza
+qiime feature-table summarize \
+  --i-table table-merged-NES-negative.qza \
+  --o-visualization table-merged-NES-negative.qzv \
+  --m-sample-metadata-file metadata-192.tsv
+  
+# Negative control reads included 131 ASVs...
+## 117 of which only appeared in one control sample 
+## 12 of which only appeared in two control samples
+## 1 of which only appeared in three control samples
+
+# The feature with the highest frequency (6,347) appeared in 3 samples 
+# 7 features had frequencies above 1,000
+
+
+---------------------------------------------------------------------------------
+ Explore positive controls
+---------------------------------------------------------------------------------
+zymo standards = everything in our positive controls; make sure that we are able to sequence all kinds of bacteria, more about presence/absence than correct proportion 
+
+scp 'emilyyu@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/*qzv' /Users/emilyyu/Desktop
+scp 'emilyyu@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/*qza' /Users/emilyyu/Desktop
+
+^ RUN THIS OUTSIDE OF DELLA ONLY 
+
+ASV on the way left. 
+Want to make similar excel 
+
+> ASV = better version of an OTU 
+> bacteria don't know the entire taxonomy; hard to assign species based on short segment of 
+16S rRNA <> pretty sure but not 100% sure what it is
+> OTU is that for every sequence w/ 97% similarity = one taxonomic unit 
+> ASV is that every unique sequence I'm seeing will = one taxonomic unit > BLAST to figure out species
+
+positive controls yielded everything EXPECTED <-- add into my thesis 
+Positive controls recovered all eight bacterial species expected in the mock community standards(ZymoBIOMICS D6300 and D6305), including three Gram-negative bacteria and five Gram-positive 
+bacteria (Supplemental Table S3).
+
+Get all the BLAST results 
+rep-seqs-merged-NES-193.qzv > find sequence and then BLAST (put in some music) 
+
+---------------------------------------------------------------------------------
+Convert .qza to text file and then find raw numbers
+---------------------------------------------------------------------------------
+
+# export biom file
+qiime tools export --input-path table-merged-CIF-ControlPos.qza --output-path exported
+cd exported
+mv feature-table.biom /tigress/decandia/Microbes/4_CIF/table-merged-CIF-ControlPos.biom
+cd ../
+rmdir exported
+
+# convert biom to txt
+biom convert -i table-merged-CIF-ControlPos.biom -o table-merged-CIF-ControlPos.txt --to-tsv
+
+# copy files to desktop
+scp 'decandia@della5.princeton.edu:/tigress/decandia/Microbes/4_CIF/*txt' /Users/alexandradecandia/Desktop/filtering-infiles 
+
+---------------------------------------------------------------------------------
+NEGATIVES
+---------------------------------------------------------------------------------
+exporting code to get 
+(1) negative control table 
+(2) the full feature table 
+- those features showing up, are you always seeing them in every place and if not, 
+no worries then 
+
+# export biom file
+qiime tools export /Users/emilyyu/table-merged-NES-negative.qza /Users/emilyyu/Desktop exported
+
+qiime tools export --input-path table-merged-NES-negative.qza --output-path exported2
+
+# copy files to desktop
+scp 'decandia@della5.princeton.edu:/tigress/decandia/Microbes/4_CIF/*txt' /Users/alexandradecandia/Desktop/filtering-infiles 
+
+module load anaconda3/2021.11
+conda activate /tigress/VONHOLDT/BIN/qiime2-2021.8
+
+---------------------------------------------------------------------------------
+Finding out what is wrong with my negatives  
+---------------------------------------------------------------------------------
+# DIFFERENCES IN SEQUENCING DEPTH 
+
+# Download relevant files 
+scp 'emilyyu@della8.princeton.edu:/tigress/VONHOLDT/emilyyu/table-merged-NES-192.qza' /Users/emilyyu/Desktop/temp
+# Filtered my feature table to only include PLATE 1 individuals and SAMPLES ONLY (no controls)
+qiime feature-table filter-samples \
+  --i-table table-merged-NES-192.qza \
+  --m-metadata-file metadata-192.tsv \
+  --p-where "[Plate]='1' AND [SampleType]='sample'" \
+  --o-filtered-table table-merged-NES-plate1.qza
+qiime feature-table summarize \
+  --i-table table-merged-NES-plate1.qza \
+  --o-visualization table-merged-NES-plate1.qzv \
+  --m-sample-metadata-file metadata-192.tsv
+  
+## Details about plate 1 sequencing depth 
+### 94 samples, 980 features, ~3,560,000 in total frequency 
+### frequency/sample range [18-77,700] with a median of 37,0000
+  
+# Filtered my feature table to only include PLATE 2 individuals and SAMPLES ONLY (no controls)
+qiime feature-table filter-samples \
+  --i-table table-merged-NES-192.qza \
+  --m-metadata-file metadata-192.tsv \
+  --p-where "[Plate]='2' AND [SampleType]='sample'" \
+  --o-filtered-table table-merged-NES-plate2.qza
+qiime feature-table summarize \
+  --i-table table-merged-NES-plate2.qza \
+  --o-visualization table-merged-NES-plate2.qzv \
+  --m-sample-metadata-file metadata-192.tsv
+
+## Details about plate 2 sequencing depth 
+### 84 samples, 474 features, ~1,150,000 in total frequency 
+### frequency/sample range [0-39,000] with a median of ~13,000
+
+# NEGATIVES MIRROR NEARBY SAMPLES 
+
+(1) Plate 1: G11 ES4756T0 Negative control
+Touching 8 other samples: 
+F10	ES4738T4	Oppo (5/2)
+G10	ES4674T1	Pixie (3/12)
+H10	ES4719T2	Tanpar (5/3)
+F11	ES4744T4	Gyoza (4/29)
+H11	ES4678T0	Spinach
+F12	ES4741T2	Cory (4/21)
+G12	ES4672T2	Sheerwater (5/20)
+H12	ES4708T2	Nathan (3/22)
+
+(2) Plate 2 : H12 ESXXXXX4 Negative control 
+In a corner, so only touching 3 other wells 
+G11	ES4685T2X
+H11	ES47941X
+G12	ES4713T2X
