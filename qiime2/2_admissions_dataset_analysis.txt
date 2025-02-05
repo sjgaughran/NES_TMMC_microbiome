@@ -1,0 +1,370 @@
+---------------------------------------------------------------------------------
+Admission Dataset Analyses 
+---------------------------------------------------------------------------------
+
+# At this point, all code was conducted locally in a newly created folder. Locally downloaded all files needed from remote system Tigressdata to conduct analyses. Manually created a new metadata file titled "metadata-44-tsv" that removed controls and seals that did not pass our inclusion criteria: 
+# 1) Seal was admitted to rehabilitation in the month of March 
+# 2) Seal was not euthanized or did not die in treatment
+# 3) Initial rectal sample was collected within 10 days of admission to rehabilitation facility
+# 4) Seal exhibited no major medical abnormalities (e.g., lungworm infection)
+# 5) Duplicate samples were removed where the sample with the greater number of sequences was retained
+# 6) Seal did not take any medication beyond vitamin supplementation (i.e. anthelmintics, opioids, and antibiotics).
+
+# STEP 1: Filtered my feature table to only include seals that passed our inclusion criteria 
+qiime feature-table filter-samples \
+  --i-table table-merged-NES-192.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-filtered-table table-merged-NES-44.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-44.qza \
+  --m-sample-metadata-file metadata-44.tsv \
+  --o-visualization table-merged-NES-44.qzv 
+
+qiime feature-table filter-seqs \
+  --i-data rep-seqs-merged-NES-192.qza \
+  --i-table table-merged-NES-44.qza \
+  --o-filtered-data rep-seqs-merged-NES-44.qza 
+
+# STEP 2: Do all filtering first with 44 samples 
+## Filter out mitochondria and chloroplasts 
+### Classify sequences 
+wget \
+  -O "gg-13-8-99-515-806-nb-classifier.qza" \
+  "https://data.qiime2.org/2024.5/common/gg-13-8-99-515-806-nb-classifier.qza"
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier gg-13-8-99-515-806-nb-classifier.qza \
+  --i-reads rep-seqs-merged-NES-44.qza \
+  --o-classification taxonomy-44.qza
+
+### Once sequences are classified, filter out mitochondria and chloroplasts 
+qiime taxa filter-table \
+  --i-table table-merged-NES-44.qza \
+  --i-taxonomy taxonomy-44.qza \
+  --p-exclude mitochondria,chloroplast \
+  --o-filtered-table table-merged-NES-44-no-mito-chloro.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-44-no-mito-chloro.qza \
+  --m-sample-metadata-file metadata-44.tsv \
+  --o-visualization table-merged-NES-44-no-mito-chloro.qzv 
+
+## Remove singletons 
+## Filtering out singletons, unique ASVs that only exist in one example 
+qiime feature-table filter-features \
+  --i-table table-merged-NES-44-no-mito-chloro.qza \
+  --p-min-samples 2 \
+  --o-filtered-table table-merged-NES-44-no-mito-chloro-singletons.qza
+
+qiime feature-table summarize \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+  --m-sample-metadata-file metadata-44.tsv \
+  --o-visualization table-merged-NES-44-no-mito-chloro-singletons.qzv 
+
+qiime feature-table filter-seqs \
+  --i-data rep-seqs-merged-NES-44.qza \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+  --o-filtered-data rep-seqs-merged-NES-44-no-mito-chloro-singletons.qza 
+
+# STEP 3: Making phylogenetic trees 
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences rep-seqs-merged-NES-44-no-mito-chloro-singletons.qza \
+  --o-alignment aligned-rep-seqs.qza \
+  --o-masked-alignment masked-aligned-rep-seqs.qza \
+  --o-tree unrooted-tree.qza \
+  --o-rooted-tree rooted-tree.qza
+
+# STEP 4: Generating alpha rarefaction graphs
+qiime diversity alpha-rarefaction \
+--i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+--i-phylogeny rooted-tree.qza \
+--p-max-depth 10000 \
+--m-metadata-file metadata-44.tsv \
+--o-visualization alpha-rarefaction.qzv
+
+qiime diversity alpha-rarefaction \
+--i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+--i-phylogeny rooted-tree.qza \
+--p-max-depth 10000 \
+--p-metrics pielou_e \
+--m-metadata-file metadata-44.tsv \
+--o-visualization alpha-rarefaction.qzv
+
+# STEP 5: Generating alpha and beta diversity metrics 
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-tree.qza \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+  --p-sampling-depth 4768 \
+  --m-metadata-file metadata-44.tsv \
+  --output-dir core-metrics-results
+  
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/evenness_vector.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/evenness-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/observed_features_vector.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/observed_features_vector.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/shannon_vector.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/shannon_vector.qzv
+  
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-sex.qzv \
+  --p-formula "Sex" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-county.qzv \
+  --p-formula "County"  
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --m-metadata-column County \
+  --p-pairwise \
+  --o-visualization core-metrics-results/bray-curtis-county-pairwise.qzv 
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/plate-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/sex-permdisp.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/county-permdisp.qzv
+  
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-county-multivariate.qzv \
+  --p-formula "Plate+Sex+County" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-plate-multivariate.qzv \
+  --p-formula "County+Sex+Plate"  
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-bray-curtis-sex-multivariate.qzv \
+  --p-formula "County+Plate+Sex"  
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-sex.qzv \
+  --p-formula "Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-county.qzv \
+  --p-formula "County" 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --m-metadata-column County \
+  --p-pairwise \
+  --p-permutations 999 \
+  --o-visualization core-metrics-results/unweighted-county-pairwise.qzv 
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/plate-permdisp-uu.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/sex-permdisp-uu.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/county-permdisp-uu.qzv
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-plate-multivariate.qzv \
+  --p-formula "County+Sex+Plate"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-county-multivariate.qzv \
+  --p-formula "Plate+Sex+County" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-unweighted-sex-multivariate.qzv \
+  --p-formula "County+Plate+Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-plate.qzv \
+  --p-formula "Plate" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-sex.qzv \
+  --p-formula "Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-county.qzv \
+  --p-formula "County" 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --m-metadata-column County \
+  --o-visualization core-metrics-results/weighted-county-pairwise.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Plate \
+--p-method permdisp \
+--o-visualization core-metrics-results/plate-permdisp-wu.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column Sex \
+--p-method permdisp \
+--o-visualization core-metrics-results/sex-permdisp-wu.qzv
+
+qiime diversity beta-group-significance \
+--i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata-44.tsv \
+--m-metadata-column County \
+--p-method permdisp \
+--o-visualization core-metrics-results/county-permdisp-wu.qzv
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-sex-multivariate.qzv \
+  --p-formula "County+Plate+Sex"
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-county-multivariate.qzv \
+  --p-formula "Plate+Sex+County" 
+
+qiime diversity adonis \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file metadata-44.tsv \
+  --o-visualization core-metrics-results/adonis-weighted-plate-multivariate.qzv \
+  --p-formula "County+Sex+Plate" 
+  
+# STEP 6: Differential abundance analyses  
+## Removing ASVs that are not classified beyond the phylum level 
+qiime feature-classifier classify-sklearn \
+  --i-classifier gg-13-8-99-515-806-nb-classifier.qza \
+  --i-reads rep-seqs-merged-NES-44-no-mito-chloro-singletons.qza  \
+  --o-classification taxonomy-44-no-mito-chloro-singletons.qza
+
+qiime taxa filter-table \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons.qza \
+  --i-taxonomy taxonomy-44-no-mito-chloro-singletons.qza \
+  --p-include p__ \
+  --o-filtered-table table-merged-NES-44-no-mito-chloro-singletons-with-phyla.qza
+
+qiime taxa collapse \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons-with-phyla.qza \
+  --i-taxonomy taxonomy-44-no-mito-chloro-singletons.qza \
+  --p-level 6 \
+  --o-collapsed-table table-l6.qza
+
+qiime taxa collapse \
+  --i-table table-merged-NES-44-no-mito-chloro-singletons-with-phyla.qza \
+  --i-taxonomy taxonomy-44.qza \
+  --p-level 3 \
+  --o-collapsed-table table-l3.qza
+
+qiime composition ancombc \
+--i-table table-l6.qza \
+--m-metadata-file metadata-44.tsv \
+--p-formula "Sex+County+Plate" \
+--p-p-adj-method bonferroni \
+--o-differentials plate_sex_diff-bonferroni-l6.qza
+
+qiime composition tabulate \
+--i-data plate_sex_diff-bonferroni-l6.qza \
+--o-visualization plate_sex_diff-bonferroni-l6.qzv
+
+qiime composition da-barplot \
+--i-data plate_sex_diff-bonferroni-l6.qza \
+--p-significance-threshold 0.05 \
+--o-visualization l6-da-barplot-bonferroni-subject.qzv 
+
+qiime composition ancombc \
+--i-table table-l3.qza \
+--m-metadata-file metadata-44.tsv \
+--p-formula "Sex+County+Plate" \
+--p-p-adj-method bonferroni \
+--o-differentials plate_sex_diff-bonferroni-l3.qza
+
+qiime composition tabulate \
+--i-data plate_sex_diff-bonferroni-l3.qza \
+--o-visualization plate_sex_diff-bonferroni-l3.qzv
+
+qiime composition da-barplot \
+--i-data plate_sex_diff-bonferroni-l3.qza \
+--p-significance-threshold 0.05 \
+--o-visualization l3-da-barplot-bonferroni-subject.qzv 
+
+
+
+
+
